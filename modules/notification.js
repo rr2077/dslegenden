@@ -26,7 +26,7 @@
   // Ändere hier was -> Digest ändert sich -> Popup erscheint wieder
   // -----------------------------
   const POPUP = {
-    enabled: true,
+    enabled: false,
     id: "2026-02-22-support-announcement-v3",
     title: "DS-Tools - Ankündigung",
     headline: `Danke für euren Support!`,
