@@ -1,6 +1,6 @@
 {
-  "baseUrl": "https://raw.githubusercontent.com/EmoteBot6/DieStaemmeScripts/master",
-  "assetsBase": "https://cdn.jsdelivr.net/gh/EmoteBot6/DieStaemmeScripts@master",
+  "baseUrl": "https://raw.githubusercontent.com/rr2077/dslegenden/main",
+  "assetsBase": "https://cdn.jsdelivr.net/gh/rr2077/dslegenden@main",
   "routes": {
     "global": [
       {
@@ -338,4 +338,3 @@
     ]
   }
 }
-
