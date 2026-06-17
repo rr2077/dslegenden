@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         SpeckMichs Auto Recruiter v1 (Bot-Schutz safe)
+// @name         SpeckMichs Auto Recruiter v1 (Bot-Schutz safe + Randomizer)
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle (gated by DSGuards) in Die Stämme (DE)
-// @author       SpeckMich
+// @version      1.3
+// @description  Automatisiert Masseneinheitenrekrutierung mit UI-Kontrolle und 10% Random-Delay
+// @author       SpeckMich / rr2077
 // @match        https://*.die-staemme.de/game.php?village=*&screen=train*
 // @match        https://*.die-staemme.de/game.php?screen=train*
 // @grant        none
@@ -25,9 +25,18 @@
   let recruitDelaySeconds = parseInt(localStorage.getItem('recruitDelaySeconds'), 10);
   if (!Number.isFinite(recruitDelaySeconds) || recruitDelaySeconds < 1) recruitDelaySeconds = 5;
 
-  let cancelRecruitLoop = null;   // canceller returned by gateInterval
+  let cancelRecruitLoop = null;   // canceller returned by gateTimeout chain
   let cancelOneShotKick = null;   // canceller returned by gateTimeout
   let cancelReturnTmo = null;     // canceller for the "return" navigation
+
+  // ---- Helper for 10% Randomization -----------------------------------------
+  function getRandomizedMs(baseSeconds) {
+    const deviation = 0.10; // 10% Abweichung
+    const min = baseSeconds * (1 - deviation);
+    const max = baseSeconds * (1 + deviation);
+    const randomSeconds = Math.random() * (max - min) + min;
+    return Math.floor(randomSeconds * 1000);
+  }
 
   // ---- UI -------------------------------------------------------------------
   function styleLikeAutoScavenge(btn, isOn) {
@@ -121,32 +130,38 @@
         guardAction(() => btn?.click());
         await new Promise(r => gateTimeout(r, 140));
       }
-      // Done
       console.log('[AutoRecruit] ✅ Rekrutierung ausgeführt.');
     } else if (!fillButtons.length) {
       console.log('[AutoRecruit] ⚠️ Keine Rekrutierungsfelder gefunden.');
     }
   }
 
+  // Rekrutierungsschleife mit dynamisch wechselnden, randomisierten Zeiten
+  function runRecruitLoop() {
+    if (!recruitingEnabled) return;
+
+    clickRecruitButtons();
+
+    // Berechne für den NÄCHSTEN Durchlauf eine völlig neue Zufallszeit (+/- 10%)
+    const nextTimeoutMs = getRandomizedMs(recruitDelaySeconds);
+    console.log(`[AutoRecruit] Nächster Check in ${Math.round(nextTimeoutMs / 1000)} Sekunden.`);
+
+    cancelRecruitLoop = gateTimeout(() => {
+      runRecruitLoop();
+    }, nextTimeoutMs);
+  }
+
   function startRecruiting() {
     if (cancelRecruitLoop) return;
 
-    // One immediate (but gated) kick so it starts without waiting a full interval
+    // Erster, schneller Kickoff nach dem Laden der Seite (gated)
     cancelOneShotKick = gateTimeout(() => {
-      if (recruitingEnabled) clickRecruitButtons();
+      if (recruitingEnabled) runRecruitLoop();
     }, 300);
 
-    // Main loop—completely Bot-Schutz–aware
-    cancelRecruitLoop = gateInterval(() => {
-      if (recruitingEnabled) clickRecruitButtons();
-    }, recruitDelaySeconds * 1000, {
-      jitter: [250, 750],       // small jitter to de-sync across tabs
-      requireVisible: false     // keep running even if tab is background; DSGuards still pauses on Bot-Schutz
-    });
-
-    // Also schedule a safe return (below)
+    // Zeitgleich die Rückkehr zur Übersicht planen (ebenfalls randomisiert)
     scheduleReturnToMass();
-    console.log('[AutoRecruit] 🔁 Recruiting gestartet.');
+    console.log('[AutoRecruit] 🔁 Recruiting mit Randomizer gestartet.');
   }
 
   function stopRecruiting() {
@@ -162,12 +177,13 @@
     console.log('[AutoRecruit] ⛔ Recruiting gestoppt.');
   }
 
-  // After acting on a subpage, try to navigate back to the “mass” page (gated)
+  // Nach der Aktion zur Massenseite zurückkehren (Nutzt jetzt ebenfalls die 10% Abweichung)
   function scheduleReturnToMass() {
     if (typeof cancelReturnTmo === 'function') cancelReturnTmo();
 
     const stored = parseInt(localStorage.getItem('recruitDelaySeconds'), 10);
-    const fallbackMs = (Number.isFinite(stored) ? stored : 5) * 1000;
+    const baseSeconds = Number.isFinite(stored) ? stored : 5;
+    const randomizedMs = getRandomizedMs(baseSeconds);
 
     cancelReturnTmo = gateTimeout(() => {
       const backLink =
@@ -178,10 +194,10 @@
       if (backLink) {
         guardAction(() => location.assign(backLink.href));
       } else {
-        // try again briefly; still gated so it auto-pauses on Bot-Schutz
+        // Falls der Link noch nicht da ist, Schleife erneut anstoßen
         scheduleReturnToMass();
       }
-    }, fallbackMs);
+    }, randomizedMs);
   }
 
   // ---- Boot -----------------------------------------------------------------
